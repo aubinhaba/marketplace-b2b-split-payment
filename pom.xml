@@ -29,6 +29,8 @@
         <resilience4j.version>2.2.0</resilience4j.version>
         <spring-cloud.version>2023.0.3</spring-cloud.version>
         <spring-cloud-aws.version>3.2.0</spring-cloud-aws.version>
+        <!-- Docker API floor for Testcontainers: docker-java negotiates 1.32, below the minimum Docker Engine 29+ accepts -->
+        <docker.api.version>1.44</docker.api.version>
     </properties>
 
     <dependencyManagement>
@@ -136,6 +138,11 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-failsafe-plugin</artifactId>
+                    <configuration>
+                        <systemPropertyVariables>
+                            <api.version>${docker.api.version}</api.version>
+                        </systemPropertyVariables>
+                    </configuration>
                     <executions>
                         <execution>
                             <goals>

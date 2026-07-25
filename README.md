@@ -136,16 +136,13 @@ mvn test -pl order-service -Dtest=HexagonalArchitectureTest
 `mvn verify` starts a real PostgreSQL 16 container: `PlaceOrderIT` runs the full HTTP → controller → use
 case → JPA → PostgreSQL path and asserts the outbox guarantee over direct JDBC.
 
-On Docker Engine 29 or newer, Testcontainers fails with *"Could not find a valid Docker environment"*: the
-bundled docker-java negotiates API version 1.32, below the 1.40 minimum those daemons accept. Pin a
-supported version for the run:
+Testcontainers' bundled docker-java negotiates Docker API 1.32, below the minimum Docker Engine 29 and
+newer accept — left alone it fails with *"Could not find a valid Docker environment"*. The build pins a
+supported version through the `docker.api.version` property, so `mvn verify` works as-is; override it if
+your daemon predates Docker 25.
 
-```bash
-mvn verify -Dapi.version=1.44
-```
-
-JaCoCo reports are generated under each module's `target/site/jacoco/`. Coverage is tracked on `domain/`
-and `application/`; infrastructure adapters are excluded.
+Coverage is measured on `domain/` and `application/` only — infrastructure adapters are excluded, since
+their behaviour is covered by the integration tests rather than by line counting.
 
 ### Running a service
 

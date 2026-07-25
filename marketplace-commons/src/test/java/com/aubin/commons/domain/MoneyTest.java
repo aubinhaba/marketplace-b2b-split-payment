@@ -49,7 +49,8 @@ class MoneyTest {
         @DisplayName("throws NullPointerException when amount is null")
         void throws_when_amount_null() {
             assertThatThrownBy(() -> Money.of((BigDecimal) null, "EUR"))
-                    .isInstanceOf(NullPointerException.class);
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("amount");
         }
 
         @Test
