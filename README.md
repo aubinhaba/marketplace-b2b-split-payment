@@ -1,6 +1,22 @@
 # Marketplace B2B Split Payment
 
-A production-grade B2B marketplace platform built around the Stripe Connect split-payment model. The platform collects payments on behalf of sellers, deducts a commission, and transfers funds to connected accounts — implemented as a Java 21 / Spring Boot microservices monorepo with strict hexagonal architecture.
+A B2B marketplace platform implementing the Stripe Connect split-payment model. Built as a Java 21 / Spring Boot microservices monorepo following a strict Hexagonal Architecture, it orchestrates payment collection, automated commission deduction, and payouts to connected seller accounts.
+
+## Status
+
+Built one bounded context at a time. What is in the repository today:
+
+- **`marketplace-commons`** — shared value objects: `Money` (ISO 4217 scale normalization), `AggregateId`,
+  `DomainEvent`, `BusinessException`, and the `@CurrencyCode` constraint.
+- **`order-service`** — complete: hexagonal domain with the `Order` aggregate and its invariants, the
+  Outbox pattern end to end (transactional publisher plus a `FOR UPDATE SKIP LOCKED` poller), a REST
+  adapter returning RFC 7807 errors, Flyway migrations, four ArchUnit boundary rules, and a Testcontainers
+  integration test that proves the business row and the outbox row commit together.
+- **`payment-service`** — partial skeleton. Its package layout does not yet follow the structure below,
+  and the Stripe, resilience and idempotency work described further down is not implemented here yet.
+
+`ledger-service`, `payout-service` and the shared security module are part of the design described below;
+they are not in the repository yet. Sections marked as design state the target, not the current state.
 
 ## Architecture overview
 
@@ -51,7 +67,9 @@ com.aubin.<service>/
     └── config/
 ```
 
-**ArchUnit enforces this boundary at every build.** `domain/` and `application/` have zero Spring, JPA, or AWS imports — any violation fails CI immediately.
+**ArchUnit enforces this boundary at every build.** `domain/` and `application/` have zero Spring, JPA, or AWS imports — any violation fails CI immediately. See [ADR-001](adr/ADR-001-hexagonal-architecture-ddd.md) and [ADR-005](adr/ADR-005-archunit-architecture-guardrail.md).
+
+Architecture decisions are recorded under [`adr/`](adr).
 
 ## Tech stack
 
@@ -72,7 +90,7 @@ com.aubin.<service>/
 
 ## Key design decisions
 
-**Outbox pattern** — every domain event is written to an `outbox` table in the same transaction as the business INSERT. A `@Scheduled` poller reads pending rows and publishes to SQS. This guarantees exactly-once delivery from the database perspective and decouples the SQS call from the business transaction.
+**Outbox pattern** — every domain event is written to an `outbox` table in the same transaction as the business INSERT, so the two commit together or not at all. A `@Scheduled` poller claims pending rows with `FOR UPDATE SKIP LOCKED` — concurrent instances get disjoint subsets — publishes them to SQS, and marks them processed in the same transaction, so a failed send is simply retried. Delivery is at-least-once: consumers dedupe on the event id. `fixedDelay` rather than `fixedRate`, otherwise a slow SQS would overlap two cycles whose locks sit in different transactions. See [ADR-003](adr/ADR-003-outbox-pattern-vs-cdc.md).
 
 **SQS idempotency** — every `@SqsListener` guards with Redis `SETNX` on `eventId` before processing. Duplicate messages (SQS at-least-once delivery) are silently dropped after the key is set.
 
@@ -90,45 +108,56 @@ com.aubin.<service>/
 
 **`marketplace-commons`** — Value Objects used across all services: `Money`, `AggregateId`, `DomainEvent`, `BusinessException`, `@CurrencyCode` validation annotation.
 
-**`marketplace-commons-security`** — Spring Security auto-configuration: JWT converter, `MarketplacePrincipal` (wraps `sellerId`, scopes, roles), pluggable for both Keycloak and Cognito via a strategy interface.
+A `marketplace-commons-security` module carrying the JWT converter and the authenticated principal is part
+of the design, pluggable across identity providers through a strategy interface. It is not in the
+repository yet.
 
-## Local setup
+## Build and test
 
 ### Prerequisites
 
 - Java 21 (Temurin recommended)
 - Maven 3.9+ (no Maven Wrapper — use `mvn` from PATH)
-- Docker Desktop running
+- Docker, for the integration tests only
 
-### Start infrastructure
+### Commands
 
-```powershell
-docker compose up -d
+```bash
+# Compile and run the unit, architecture and web-layer tests
+mvn clean install -DskipITs
+
+# Everything, including the Testcontainers integration tests (needs Docker)
+mvn verify
+
+# The architecture rules alone — a couple of seconds, worth running often
+mvn test -pl order-service -Dtest=HexagonalArchitectureTest
 ```
 
-Starts Redis (idempotency), Grafana Tempo (traces), and Grafana (`:3000`, admin/admin).
+`mvn verify` starts a real PostgreSQL 16 container: `PlaceOrderIT` runs the full HTTP → controller → use
+case → JPA → PostgreSQL path and asserts the outbox guarantee over direct JDBC.
 
-### Start Keycloak (optional — only needed for JWT auth testing)
+On Docker Engine 29 or newer, Testcontainers fails with *"Could not find a valid Docker environment"*: the
+bundled docker-java negotiates API version 1.32, below the 1.40 minimum those daemons accept. Pin a
+supported version for the run:
 
-```powershell
-docker compose -f docker-compose.keycloak.yml up -d
+```bash
+mvn verify -Dapi.version=1.44
 ```
 
-Keycloak runs on `:8180` with a pre-configured `marketplace` realm.
+JaCoCo reports are generated under each module's `target/site/jacoco/`. Coverage is tracked on `domain/`
+and `application/`; infrastructure adapters are excluded.
 
-### Start a service
+### Running a service
 
-```powershell
-mvn spring-boot:run -pl payment-service -s settings-local.xml `
-    "-Dspring-boot.run.useTestClasspath=true" `
-    "-Dspring-boot.run.profiles=local"
+`order-service` expects PostgreSQL on `localhost:5432` (database `order_db`, user `order_user`), overridable
+through `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME` and `DB_PASSWORD`. Flyway applies the schema at
+startup; Hibernate only validates it.
+
+```bash
+mvn spring-boot:run -pl order-service
 ```
 
-- `-s settings-local.xml` — redirects to Maven Central (no internal Nexus required)
-- `useTestClasspath=true` — adds H2 (declared `scope=test`) to the runtime classpath
-- `profiles=local` — activates `application-local.yml` (H2 in-memory, SQS disabled, Keycloak on `:8180`)
-
-Health check: `GET http://localhost:8081/actuator/health`
+Health check: `GET http://localhost:8080/actuator/health`
 
 ### Ports
 
@@ -138,25 +167,3 @@ Health check: `GET http://localhost:8081/actuator/health`
 | payment-service | 8081 |
 | ledger-service | 8082 |
 | payout-service | 8083 |
-| Redis | 6379 |
-| Keycloak | 8180 |
-| Grafana | 3000 |
-| Tempo (OTLP) | 4318 |
-
-## Commands
-
-```powershell
-# Full build, skip integration tests
-mvn clean install -s settings-local.xml -DskipITs
-
-# ArchUnit only (< 5 s, run often)
-mvn test -pl payment-service -s settings-local.xml "-Dtest=HexagonalArchitectureTest"
-
-# Coverage report — open target/site/jacoco/index.html
-mvn verify -pl payment-service -s settings-local.xml -DskipITs
-
-# Integration tests (requires Docker)
-mvn verify -pl payment-service -s settings-local.xml
-```
-
-JaCoCo gate: **90% minimum on `domain/` and `application/`**. Infrastructure adapters are excluded.

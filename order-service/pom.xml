@@ -90,6 +90,12 @@
                     </excludes>
                 </configuration>
             </plugin>
+
+            <!-- Required: without this binding Failsafe never runs and `mvn verify` reports success having run no IT -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+            </plugin>
         </plugins>
     </build>
 

@@ -30,7 +30,6 @@ class HexagonalArchitectureTest {
                         "software.amazon.."
                 )
                 .because("ADR-001: domain is framework-free. Enforced in CI.")
-                .allowEmptyShould(true)
                 .check(classes);
     }
 
@@ -42,7 +41,6 @@ class HexagonalArchitectureTest {
                 .should().dependOnClassesThat()
                 .resideInAPackage("..infrastructure..")
                 .because("ADR-001: dependency flow is infrastructure → application → domain, never reversed.")
-                .allowEmptyShould(true)
                 .check(classes);
     }
 
@@ -54,7 +52,6 @@ class HexagonalArchitectureTest {
                 .should().dependOnClassesThat()
                 .resideInAPackage("..infrastructure..")
                 .because("ADR-001: application layer depends only on abstract ports, never on concrete adapters.")
-                .allowEmptyShould(true)
                 .check(classes);
     }
 
