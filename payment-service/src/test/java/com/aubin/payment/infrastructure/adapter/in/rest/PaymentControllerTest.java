@@ -1,10 +1,10 @@
 package com.aubin.payment.infrastructure.adapter.in.rest;
 
-import com.aubin.payment.domain.model.Payment;
-import com.aubin.payment.domain.model.PaymentStatus;
 import com.aubin.payment.application.port.in.GetPaymentQuery;
 import com.aubin.payment.application.port.in.ProcessPaymentUseCase;
 import com.aubin.payment.application.port.in.ProcessPaymentUseCase.ProcessPaymentCommand;
+import com.aubin.payment.domain.model.Payment;
+import com.aubin.payment.domain.model.PaymentStatus;
 import com.aubin.payment.infrastructure.adapter.in.rest.dto.PaymentResponse;
 import com.aubin.payment.infrastructure.adapter.in.rest.mapper.PaymentApiMapper;
 import org.junit.jupiter.api.Test;
@@ -22,9 +22,12 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+// @WithMockUser is required: SecurityConfig authenticates every route, so without it each request is a 401
 @WebMvcTest(PaymentController.class)
 @WithMockUser
 class PaymentControllerTest {
@@ -44,11 +47,12 @@ class PaymentControllerTest {
     @Test
     void create_returns_201_with_payment_response() throws Exception {
         var id = UUID.randomUUID();
-        var payment = Payment.create("cust-1", BigDecimal.TEN, "EUR");
+        var payment = Payment.create("order-1", "seller-1", "cust-1", BigDecimal.TEN, "EUR");
         var response = new PaymentResponse(id, "cust-1", BigDecimal.TEN, "EUR",
                 PaymentStatus.AUTHORIZED, Instant.now());
 
-        when(mapper.toCommand(any())).thenReturn(new ProcessPaymentCommand("cust-1", BigDecimal.TEN, "EUR"));
+        when(mapper.toCommand(any())).thenReturn(
+                new ProcessPaymentCommand("order-1", "seller-1", "cust-1", BigDecimal.TEN, "EUR"));
         when(processPayment.process(any())).thenReturn(payment);
         when(mapper.toResponse(any())).thenReturn(response);
 
@@ -56,7 +60,13 @@ class PaymentControllerTest {
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                { "customerId": "cust-1", "amount": 10.00, "currency": "EUR" }
+                                {
+                                  "orderId": "order-1",
+                                  "sellerId": "seller-1",
+                                  "customerId": "cust-1",
+                                  "amount": 10.00,
+                                  "currency": "EUR"
+                                }
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("AUTHORIZED"));
@@ -65,7 +75,7 @@ class PaymentControllerTest {
     @Test
     void getById_returns_200() throws Exception {
         var id = UUID.randomUUID();
-        var payment = Payment.create("cust-1", BigDecimal.TEN, "EUR");
+        var payment = Payment.create("order-1", "seller-1", "cust-1", BigDecimal.TEN, "EUR");
         var response = new PaymentResponse(id, "cust-1", BigDecimal.TEN, "EUR",
                 PaymentStatus.AUTHORIZED, Instant.now());
 

@@ -29,6 +29,8 @@
         <resilience4j.version>2.2.0</resilience4j.version>
         <spring-cloud.version>2023.0.3</spring-cloud.version>
         <spring-cloud-aws.version>3.2.0</spring-cloud-aws.version>
+        <stripe.version>25.7.0</stripe.version>
+        <wiremock.version>3.10.0</wiremock.version>
         <!-- Docker API floor for Testcontainers: docker-java negotiates 1.32, below the minimum Docker Engine 29+ accepts -->
         <docker.api.version>1.44</docker.api.version>
     </properties>
@@ -71,6 +73,18 @@
                 <version>${spring-cloud-aws.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.stripe</groupId>
+                <artifactId>stripe-java</artifactId>
+                <version>${stripe.version}</version>
+            </dependency>
+            <!-- standalone: dependencies are shaded, which keeps Jetty and Jackson off the test classpath -->
+            <dependency>
+                <groupId>org.wiremock</groupId>
+                <artifactId>wiremock-standalone</artifactId>
+                <version>${wiremock.version}</version>
+                <scope>test</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>

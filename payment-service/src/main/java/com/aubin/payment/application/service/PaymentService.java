@@ -25,7 +25,8 @@ public class PaymentService implements ProcessPaymentUseCase, GetPaymentQuery{
     @Override
     @Transactional
     public Payment process(ProcessPaymentCommand command) {
-        var payment = Payment.create(command.customerId(), command.amount(), command.currency());
+        var payment = Payment.create(command.orderId(), command.sellerId(), command.customerId(),
+                command.amount(), command.currency());
         var saved = repository.save(payment);
         var authorized = pspGateway.authorize(saved);
         return repository.save(authorized);

@@ -9,6 +9,8 @@ public interface ProcessPaymentUseCase {
     Payment process(ProcessPaymentCommand command);
 
     record ProcessPaymentCommand(
+            String orderId,
+            String sellerId,
             String customerId,
             BigDecimal amount,
             String currency

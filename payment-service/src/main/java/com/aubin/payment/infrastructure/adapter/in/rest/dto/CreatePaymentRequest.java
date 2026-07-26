@@ -8,6 +8,8 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 
 public record CreatePaymentRequest(
+        @NotBlank String orderId,
+        @NotBlank String sellerId,
         @NotBlank String customerId,
         @NotNull @Positive BigDecimal amount,
         @NotBlank @Size(min = 3, max = 3) String currency

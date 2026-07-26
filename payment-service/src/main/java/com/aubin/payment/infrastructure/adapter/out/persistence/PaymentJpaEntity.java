@@ -1,7 +1,12 @@
-package com.aubin.payment.infrastructure.persistence;
+package com.aubin.payment.infrastructure.adapter.out.persistence;
 
 import com.aubin.payment.domain.model.PaymentStatus;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -14,6 +19,12 @@ class PaymentJpaEntity {
     @Id
     private UUID id;
 
+    @Column(nullable = false, length = 36)
+    private String orderId;
+
+    @Column(nullable = false)
+    private String sellerId;
+
     @Column(nullable = false)
     private String customerId;
 
@@ -23,6 +34,7 @@ class PaymentJpaEntity {
     @Column(nullable = false, length = 3)
     private String currency;
 
+    // STRING not ORDINAL: reordering the enum would silently corrupt existing rows
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private PaymentStatus status;
@@ -32,9 +44,11 @@ class PaymentJpaEntity {
 
     protected PaymentJpaEntity() {}
 
-    PaymentJpaEntity(UUID id, String customerId, BigDecimal amount, String currency,
-                     PaymentStatus status, Instant createdAt) {
+    PaymentJpaEntity(UUID id, String orderId, String sellerId, String customerId,
+                     BigDecimal amount, String currency, PaymentStatus status, Instant createdAt) {
         this.id = id;
+        this.orderId = orderId;
+        this.sellerId = sellerId;
         this.customerId = customerId;
         this.amount = amount;
         this.currency = currency;
@@ -43,6 +57,8 @@ class PaymentJpaEntity {
     }
 
     UUID getId() { return id; }
+    String getOrderId() { return orderId; }
+    String getSellerId() { return sellerId; }
     String getCustomerId() { return customerId; }
     BigDecimal getAmount() { return amount; }
     String getCurrency() { return currency; }

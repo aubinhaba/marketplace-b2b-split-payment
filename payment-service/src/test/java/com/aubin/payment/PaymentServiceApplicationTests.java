@@ -11,7 +11,8 @@ import org.springframework.test.context.TestPropertySource;
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop",
-        "spring.flyway.enabled=false"
+        "spring.flyway.enabled=false",
+        "stripe.api-key=sk_test_fake_for_context_test"
 })
 class PaymentServiceApplicationTests {
 

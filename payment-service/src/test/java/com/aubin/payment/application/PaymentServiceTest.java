@@ -40,8 +40,8 @@ class PaymentServiceTest {
 
     @Test
     void process_saves_authorized_payment() {
-        var command = new ProcessPaymentCommand("customer-1", BigDecimal.TEN, "EUR");
-        var pending = Payment.create("customer-1", BigDecimal.TEN, "EUR");
+        var command = new ProcessPaymentCommand("order-1", "seller-1", "customer-1", BigDecimal.TEN, "EUR");
+        var pending = Payment.create("order-1", "seller-1", "customer-1", BigDecimal.TEN, "EUR");
         var authorized = pending.authorize();
 
         when(paymentRepository.save(any())).thenReturn(pending).thenReturn(authorized);

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 @DisplayName("Hexagonal architecture — ArchUnit guards — payment-service")
@@ -61,6 +62,29 @@ class HexagonalArchitectureTest {
         noClasses()
                 .should().resideInAPackage("com.aubin.payment.api..")
                 .because("Hexagonal convention: REST controllers are inbound adapters under infrastructure.adapter.in.rest.")
+                .check(classes);
+    }
+
+    @Test
+    @DisplayName("only the Stripe adapter imports the Stripe SDK")
+    void only_the_psp_adapter_may_depend_on_stripe() {
+        noClasses()
+                .that().resideOutsideOfPackages(
+                        "com.aubin.payment.infrastructure.adapter.out.psp..",
+                        "com.aubin.payment.infrastructure.config..")
+                .should().dependOnClassesThat().resideInAPackage("com.stripe..")
+                .because("The PSP vocabulary stops at the adapter, so swapping Stripe out never reaches the domain.")
+                .check(classes);
+    }
+
+    @Test
+    @DisplayName("outbound adapters reside under infrastructure.adapter.out")
+    void outbound_adapters_live_under_adapter_out() {
+        classes()
+                .that().haveSimpleNameEndingWith("Adapter")
+                .and().resideInAPackage("..infrastructure..")
+                .should().resideInAPackage("..infrastructure.adapter.out..")
+                .because("Keeps persistence, cache and PSP adapters from drifting back out of adapter/out.")
                 .check(classes);
     }
 }

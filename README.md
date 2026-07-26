@@ -12,8 +12,12 @@ Built one bounded context at a time. What is in the repository today:
   Outbox pattern end to end (transactional publisher plus a `FOR UPDATE SKIP LOCKED` poller), a REST
   adapter returning RFC 7807 errors, Flyway migrations, four ArchUnit boundary rules, and a Testcontainers
   integration test that proves the business row and the outbox row commit together.
-- **`payment-service`** — partial skeleton. Its package layout does not yet follow the structure below,
-  and the Stripe, resilience and idempotency work described further down is not implemented here yet.
+- **`payment-service`** — complete for the authorization path: a Stripe Connect adapter issuing
+  destination charges (`transfer_data` + `application_fee_amount`) behind Resilience4j CircuitBreaker,
+  Retry and Bulkhead, an SQS consumer of `OrderPlacedEvent` guarded by Redis `SETNX` idempotency, an
+  anti-corruption DTO isolating it from the producer's schema, and six ArchUnit rules including one that
+  keeps the Stripe SDK inside its adapter. Capture, refund and JWT ownership checks are not implemented
+  here yet.
 
 `ledger-service`, `payout-service` and the shared security module are part of the design described below;
 they are not in the repository yet. Sections marked as design state the target, not the current state.
@@ -92,9 +96,13 @@ Architecture decisions are recorded under [`adr/`](adr).
 
 **Outbox pattern** — every domain event is written to an `outbox` table in the same transaction as the business INSERT, so the two commit together or not at all. A `@Scheduled` poller claims pending rows with `FOR UPDATE SKIP LOCKED` — concurrent instances get disjoint subsets — publishes them to SQS, and marks them processed in the same transaction, so a failed send is simply retried. Delivery is at-least-once: consumers dedupe on the event id. `fixedDelay` rather than `fixedRate`, otherwise a slow SQS would overlap two cycles whose locks sit in different transactions. See [ADR-003](adr/ADR-003-outbox-pattern-vs-cdc.md).
 
-**SQS idempotency** — every `@SqsListener` guards with Redis `SETNX` on `eventId` before processing. Duplicate messages (SQS at-least-once delivery) are silently dropped after the key is set.
+**SQS idempotency** — every `@SqsListener` guards with Redis `SETNX` on `eventId` before processing. Duplicate messages (SQS at-least-once delivery) are silently dropped after the key is set. The check is one atomic `setIfAbsent` rather than a read followed by a write, which would race between concurrent consumers; when Redis is unreachable it fails open, preferring a rare duplicate over a lost payment.
 
-**Stripe Connect** — payments use `application_fee_amount` + `transfer_data.destination` on a single PaymentIntent. The seller's Connected Account ID (`sellerId`) is carried through the domain model from order creation to payout — never inferred at the infrastructure boundary.
+**Stripe Connect** — payments use `application_fee_amount` + `transfer_data.destination` on a single PaymentIntent. The seller's Connected Account ID (`sellerId`) is carried through the domain model from order creation to payout — never inferred at the infrastructure boundary. Amounts are converted using the currency's own scale, so XOF and JPY are not multiplied by 100.
+
+**Resilience around the PSP** — `StripeGatewayAdapter` carries CircuitBreaker, Retry and Bulkhead instances named after the provider. A declined card returns a FAILED payment rather than throwing, so it never trips the breaker; a 5xx throws, so it does. The fallback sits on `@Retry` and not on `@CircuitBreaker`, which would otherwise consume the first failure and stop any retry from happening.
+
+**PCI DSS SAQ-A** — card data is tokenized client-side and never reaches the platform: no PAN in a request body, a log line, a database column or an SQS payload. See [ADR-006](adr/ADR-006-client-side-tokenization-saq-a.md).
 
 **W3C TraceContext over SQS** — Spring does not propagate trace context through SQS automatically. Each outbox poller injects `traceparent`/`tracestate` as SQS `MessageAttributes`; each listener extracts and restores the span before processing. This provides end-to-end trace continuity across service boundaries in Grafana Tempo.
 
@@ -102,7 +110,7 @@ Architecture decisions are recorded under [`adr/`](adr).
 
 **`NUMERIC(19,4)` for money** — all monetary amounts are stored as `NUMERIC(19,4)` in PostgreSQL and handled as `BigDecimal` in Java. The `Money` value object normalizes scale on construction per ISO 4217 (EUR=2, XOF=0, BHD=3).
 
-**SQS FIFO `MessageGroupId` per aggregate** — set to `orderId` or `sellerId`, not a global group. A global group caps throughput at 300 msg/s across the entire queue. Per-aggregate grouping preserves ordering per business entity and scales horizontally.
+**SQS FIFO `MessageGroupId` per aggregate** — set to `orderId` or `sellerId`, not a global group. A global group caps throughput at 300 msg/s across the entire queue. Per-aggregate grouping preserves ordering per business entity and scales horizontally. FIFO is reserved for the queues whose order affects the books; the rest stay Standard. See [ADR-004](adr/ADR-004-sqs-fifo-vs-standard.md).
 
 ## Shared modules
 
@@ -133,8 +141,11 @@ mvn verify
 mvn test -pl order-service -Dtest=HexagonalArchitectureTest
 ```
 
-`mvn verify` starts a real PostgreSQL 16 container: `PlaceOrderIT` runs the full HTTP → controller → use
-case → JPA → PostgreSQL path and asserts the outbox guarantee over direct JDBC.
+`mvn verify` starts real containers. `PlaceOrderIT` runs the full HTTP → controller → use case → JPA →
+PostgreSQL path and asserts the outbox guarantee over direct JDBC. `RedisIdempotencyAdapterIT` proves the
+`SETNX` guard against a real Redis, since atomicity is a property of Redis that a mocked template cannot
+demonstrate. `StripeGatewayAdapterResilienceIT` drives the circuit breaker against WireMock, no Docker
+needed.
 
 Testcontainers' bundled docker-java negotiates Docker API 1.32, below the minimum Docker Engine 29 and
 newer accept — left alone it fails with *"Could not find a valid Docker environment"*. The build pins a

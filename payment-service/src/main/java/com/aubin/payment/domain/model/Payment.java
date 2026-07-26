@@ -6,21 +6,28 @@ import java.util.UUID;
 
 public record Payment(
         UUID id,
+        String orderId,
+        // Stripe Connected Account of the seller: the destination of the split
+        String sellerId,
         String customerId,
         BigDecimal amount,
         String currency,
         PaymentStatus status,
         Instant createdAt
 ) {
-    public static Payment create(String customerId, BigDecimal amount, String currency) {
-        return new Payment(UUID.randomUUID(), customerId, amount, currency, PaymentStatus.PENDING, Instant.now());
+    public static Payment create(String orderId, String sellerId, String customerId,
+                                 BigDecimal amount, String currency) {
+        return new Payment(UUID.randomUUID(), orderId, sellerId, customerId, amount, currency,
+                PaymentStatus.PENDING, Instant.now());
     }
 
     public Payment authorize() {
-        return new Payment(id, customerId, amount, currency, PaymentStatus.AUTHORIZED, createdAt);
+        return new Payment(id, orderId, sellerId, customerId, amount, currency,
+                PaymentStatus.AUTHORIZED, createdAt);
     }
 
     public Payment fail() {
-        return new Payment(id, customerId, amount, currency, PaymentStatus.FAILED, createdAt);
+        return new Payment(id, orderId, sellerId, customerId, amount, currency,
+                PaymentStatus.FAILED, createdAt);
     }
 }

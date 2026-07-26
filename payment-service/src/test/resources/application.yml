@@ -1,0 +1,16 @@
+# Excluding the autoconfiguration is the only reliable way to stop SQS polling in tests:
+# spring.cloud.aws.sqs.listener.auto-startup=false still starts the poller in Spring Cloud AWS 3.2.0.
+spring:
+  autoconfigure:
+    exclude:
+      - io.awspring.cloud.autoconfigure.sqs.SqsAutoConfiguration
+
+  # Lettuce connects lazily, so a context without a real Redis still starts
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+aws:
+  sqs:
+    order-placed-queue: https://sqs.eu-west-1.amazonaws.com/000000000000/test-order-placed

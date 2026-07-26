@@ -1,7 +1,7 @@
-package com.aubin.payment.infrastructure.persistence;
+package com.aubin.payment.infrastructure.adapter.out.persistence;
 
-import com.aubin.payment.domain.model.Payment;
 import com.aubin.payment.application.port.out.PaymentRepository;
+import com.aubin.payment.domain.model.Payment;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -26,11 +26,17 @@ public class PaymentPersistenceAdapter implements PaymentRepository {
         return jpaRepository.findById(id).map(this::toDomain);
     }
 
-    private PaymentJpaEntity toEntity(Payment p) {
-        return new PaymentJpaEntity(p.id(), p.customerId(), p.amount(), p.currency(), p.status(), p.createdAt());
+    private PaymentJpaEntity toEntity(Payment payment) {
+        return new PaymentJpaEntity(
+                payment.id(), payment.orderId(), payment.sellerId(), payment.customerId(),
+                payment.amount(), payment.currency(), payment.status(), payment.createdAt()
+        );
     }
 
-    private Payment toDomain(PaymentJpaEntity e) {
-        return new Payment(e.getId(), e.getCustomerId(), e.getAmount(), e.getCurrency(), e.getStatus(), e.getCreatedAt());
+    private Payment toDomain(PaymentJpaEntity entity) {
+        return new Payment(
+                entity.getId(), entity.getOrderId(), entity.getSellerId(), entity.getCustomerId(),
+                entity.getAmount(), entity.getCurrency(), entity.getStatus(), entity.getCreatedAt()
+        );
     }
 }

@@ -12,7 +12,7 @@ class PaymentTest {
 
     @Test
     void create_initializes_with_pending_status() {
-        var payment = Payment.create("customer-1", BigDecimal.TEN, "EUR");
+        var payment = Payment.create("order-uuid-1", "seller-1", "customer-1", BigDecimal.TEN, "EUR");
 
         assertThat(payment.id()).isNotNull();
         assertThat(payment.status()).isEqualTo(PaymentStatus.PENDING);
@@ -21,7 +21,7 @@ class PaymentTest {
 
     @Test
     void authorize_transitions_status_to_authorized() {
-        var payment = Payment.create("customer-1", BigDecimal.TEN, "EUR");
+        var payment = Payment.create("order-uuid-1", "seller-1", "customer-1", BigDecimal.TEN, "EUR");
 
         var authorized = payment.authorize();
 
@@ -31,7 +31,7 @@ class PaymentTest {
 
     @Test
     void fail_transitions_status_to_failed() {
-        var payment = Payment.create("customer-1", BigDecimal.TEN, "EUR");
+        var payment = Payment.create("order-uuid-1", "seller-1", "customer-1", BigDecimal.TEN, "EUR");
 
         var failed = payment.fail();
 

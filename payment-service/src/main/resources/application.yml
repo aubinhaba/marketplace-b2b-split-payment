@@ -1,17 +1,71 @@
 spring:
   application:
     name: payment-service
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/payment}
     username: ${DB_USERNAME:payment}
     password: ${DB_PASSWORD:payment}
     driver-class-name: org.postgresql.Driver
+
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+
   flyway:
     enabled: true
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  cloud:
+    aws:
+      region:
+        static: ${AWS_DEFAULT_REGION:eu-west-1}
+
 server:
-  port: 8080
+  port: 8081
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      stripe:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        # Only RuntimeException counts as a failure, which keeps card declines from opening the circuit
+        recordExceptions:
+          - java.lang.RuntimeException
+  retry:
+    instances:
+      stripe:
+        maxAttempts: 3
+        waitDuration: 1s
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - java.lang.RuntimeException
+        # Retrying a declined card would just decline again
+        ignoreExceptions:
+          - com.stripe.exception.CardException
+  bulkhead:
+    instances:
+      stripe:
+        maxConcurrentCalls: 20
+        maxWaitDuration: 100ms
+
+aws:
+  sqs:
+    order-placed-queue: ${ORDER_PLACED_QUEUE_URL:https://sqs.eu-west-1.amazonaws.com/000000000000/order-placed}
+
+stripe:
+  api-key: ${STRIPE_API_KEY}
+  # Empty means api.stripe.com; tests point it at WireMock
+  base-url: ""
+  platform-fee-rate: ${STRIPE_PLATFORM_FEE_RATE:0.02}
